@@ -14,8 +14,15 @@ A live paper-trading simulator with a web dashboard.
 ## Quick start
 
 ```bash
-pip install -r requirements.txt
-python -m trading_sim          # opens live dashboard at http://localhost:5000
+pip install -r requirements.txt   # install dependencies (Flask)
+python -m trading_sim              # opens live dashboard at http://localhost:5000
+```
+
+Or install as a package:
+
+```bash
+pip install .
+trading-sim                        # same thing, launches the server
 ```
 
 ## Run tests
