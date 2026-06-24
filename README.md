@@ -31,6 +31,18 @@ trading-sim                        # same thing, launches the server
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
+## Troubleshooting
+
+**`ERR_CONNECTION_REFUSED` / Can't reach localhost:5000**
+
+The server must be running before you open the browser:
+
+```bash
+python -m trading_sim   # start this first, then open http://localhost:5000
+```
+
+If port 5000 is already in use (e.g., macOS AirPlay Receiver), either free the port or change it in `trading_sim/server.py`.
+
 ## Core API
 
 ```python
