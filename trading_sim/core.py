@@ -114,7 +114,7 @@ class Backtester:
             elif signal == "sell" and position > 0 and risk.can_trade(total_pnl):
                 qty = min(qty_per_trade, position)
                 fee = price * qty * (self.fee_bps / 10_000)
-                trade_pnl = (price - avg_entry) * qty - fee
+                trade_pnl = (price - avg_entry) * qty
                 cash += price * qty - fee
                 position -= qty
                 realized += trade_pnl

@@ -27,10 +27,20 @@ class BacktestTests(unittest.TestCase):
             nonlocal has_position
             if chart["sma"][i] is None:
                 return "hold"
-            if not has_position and chart["ema"][i] and chart["sma"][i] and chart["ema"][i] >= chart["sma"][i]:
+            if (
+                not has_position
+                and chart["ema"][i] is not None
+                and chart["sma"][i] is not None
+                and chart["ema"][i] >= chart["sma"][i]
+            ):
                 has_position = True
                 return "buy"
-            if has_position and chart["ema"][i] and chart["sma"][i] and chart["ema"][i] < chart["sma"][i]:
+            if (
+                has_position
+                and chart["ema"][i] is not None
+                and chart["sma"][i] is not None
+                and chart["ema"][i] < chart["sma"][i]
+            ):
                 has_position = False
                 return "sell"
             return "hold"
