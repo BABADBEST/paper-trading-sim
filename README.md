@@ -1,15 +1,24 @@
 # paper-trading-sim
 
-Minimal Python paper-trading simulator that includes:
+A live paper-trading simulator with a web dashboard.
 
-- live market-data series handling (price stream input)
-- chart data generation with SMA/EMA indicators
-- strategy backtesting
-- risk controls (position cap + daily loss limit)
-- fake order matching (immediate simulated fills)
-- P&L dashboard summary
+## Features
+
+- **Live market data** – simulated price stream with geometric random walk
+- **Charting + SMA/EMA indicators** – real-time canvas chart with overlays
+- **Strategy backtesting** – run historical strategy tests with `Backtester`
+- **Risk controls** – configurable max position and daily loss limit
+- **Fake order matching** – immediate simulated fills on buy/sell
+- **P&L dashboard** – live equity, realized/unrealized P&L, win rate
 
 ## Quick start
+
+```bash
+pip install -r requirements.txt
+python -m trading_sim          # opens live dashboard at http://localhost:5000
+```
+
+## Run tests
 
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
@@ -17,6 +26,16 @@ python -m unittest discover -s tests -p "test_*.py"
 
 ## Core API
 
-- `trading_sim.build_chart_series(prices, sma_period, ema_period)`
-- `trading_sim.Backtester().run(prices, strategy, risk, qty_per_trade)`
-- `trading_sim.PnLDashboard.summarize(result)`
+```python
+from trading_sim import Backtester, PnLDashboard, LiveTradingEngine, build_chart_series
+
+# Backtesting
+result = Backtester().run(prices, strategy, risk, qty_per_trade)
+PnLDashboard.summarize(result)
+
+# Live trading
+engine = LiveTradingEngine()
+engine.start(seed_price=100.0)
+engine.place_order("buy", qty=1)
+engine.snapshot()
+```

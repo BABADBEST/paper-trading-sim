@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Paper Trading Simulator – Live</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;
+        --green:#3fb950;--red:#f85149;--blue:#58a6ff;--orange:#d29922;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);padding:16px}
+  h1{font-size:1.3rem;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px}
+  canvas{width:100%;height:340px;display:block;border-radius:6px;background:#0d1117}
+  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
+  .stat{background:var(--bg);border-radius:6px;padding:8px;text-align:center}
+  .stat .label{font-size:.7rem;text-transform:uppercase;color:#8b949e}
+  .stat .value{font-size:1.1rem;font-weight:600;margin-top:2px}
+  .pos{color:var(--green)}.neg{color:var(--red)}
+  .controls{display:flex;gap:8px;margin-bottom:10px}
+  button{border:none;border-radius:6px;padding:8px 18px;font-weight:600;font-size:.9rem;cursor:pointer}
+  .buy-btn{background:var(--green);color:#000}
+  .sell-btn{background:var(--red);color:#fff}
+  .reset-btn{background:var(--border);color:var(--text)}
+  select,input[type=number]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;width:70px}
+  .trades-list{max-height:280px;overflow-y:auto;font-size:.8rem}
+  .trades-list table{width:100%;border-collapse:collapse}
+  .trades-list th,.trades-list td{padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)}
+  .trades-list th{color:#8b949e;font-weight:500;position:sticky;top:0;background:var(--card)}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>📈 Paper Trading Simulator <span style="font-size:.75rem;color:#8b949e">LIVE</span></h1>
+<div class="grid">
+  <!-- LEFT: chart + stats -->
+  <div>
+    <div class="card">
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="stats" id="stats">
+      <div class="stat"><div class="label">Price</div><div class="value" id="s-price">—</div></div>
+      <div class="stat"><div class="label">Cash</div><div class="value" id="s-cash">—</div></div>
+      <div class="stat"><div class="label">Position</div><div class="value" id="s-pos">—</div></div>
+      <div class="stat"><div class="label">Avg Entry</div><div class="value" id="s-avg">—</div></div>
+      <div class="stat"><div class="label">Realized P&L</div><div class="value" id="s-rpnl">—</div></div>
+      <div class="stat"><div class="label">Unrealized P&L</div><div class="value" id="s-upnl">—</div></div>
+      <div class="stat"><div class="label">Total P&L</div><div class="value" id="s-tpnl">—</div></div>
+      <div class="stat"><div class="label">Equity</div><div class="value" id="s-eq">—</div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: controls + trade log -->
+  <div>
+    <div class="card">
+      <div class="controls">
+        <button class="buy-btn" onclick="placeOrder('buy')">BUY</button>
+        <button class="sell-btn" onclick="placeOrder('sell')">SELL</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.8rem">Qty
+          <input type="number" id="qty" value="1" min="1" max="100"/>
+        </label>
+        <button class="reset-btn" onclick="resetSim()">Reset</button>
+      </div>
+      <div id="order-msg" style="font-size:.8rem;margin-bottom:8px;min-height:1.2em"></div>
+      <h3 style="font-size:.85rem;margin-bottom:6px">Trade Log</h3>
+      <div class="trades-list">
+        <table>
+          <thead><tr><th>#</th><th>Side</th><th>Qty</th><th>Price</th><th>P&L</th></tr></thead>
+          <tbody id="trade-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MAX_PTS = 300;
+let priceBuf=[], smaBuf=[], emaBuf=[];
+
+// ---- Canvas chart ----
+const canvas=document.getElementById('chart');
+const ctx=canvas.getContext('2d');
+function resizeCanvas(){canvas.width=canvas.clientWidth*devicePixelRatio;canvas.height=canvas.clientHeight*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio)}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+
+function drawChart(){
+  const W=canvas.clientWidth, H=canvas.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  if(priceBuf.length<2) return;
+
+  const all=[...priceBuf,...smaBuf.filter(v=>v!==null),...emaBuf.filter(v=>v!==null)];
+  let mn=Math.min(...all), mx=Math.max(...all);
+  const pad=(mx-mn)*0.1||1; mn-=pad; mx+=pad;
+  const xStep=W/(priceBuf.length-1);
+  const toY=v=>H-(v-mn)/(mx-mn)*H;
+
+  function drawLine(buf,color,dash){
+    ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.setLineDash(dash||[]);
+    let started=false;
+    for(let i=0;i<buf.length;i++){
+      if(buf[i]===null)continue;
+      if(!started){ctx.moveTo(i*xStep,toY(buf[i]));started=true}
+      else ctx.lineTo(i*xStep,toY(buf[i]));
+    }
+    ctx.stroke();ctx.setLineDash([]);
+  }
+  drawLine(priceBuf,'#58a6ff');
+  drawLine(smaBuf,'#3fb950',[6,3]);
+  drawLine(emaBuf,'#d29922',[3,3]);
+
+  // legend
+  ctx.font='11px sans-serif';
+  [['Price','#58a6ff',30],['SMA','#3fb950',90],['EMA','#d29922',140]].forEach(([l,c,x])=>{
+    ctx.fillStyle=c;ctx.fillRect(x,8,14,3);ctx.fillStyle='#8b949e';ctx.fillText(l,x+18,13);
+  });
+}
+
+// ---- SSE ----
+function connect(){
+  const es=new EventSource('/stream');
+  es.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    // price buffer
+    if(d.chart&&d.chart.price){
+      priceBuf=d.chart.price.slice(-MAX_PTS);
+      smaBuf=d.chart.sma?d.chart.sma.slice(-MAX_PTS):[];
+      emaBuf=d.chart.ema?d.chart.ema.slice(-MAX_PTS):[];
+    } else {
+      priceBuf.push(d.last_price);
+      if(priceBuf.length>MAX_PTS) priceBuf.shift();
+    }
+    drawChart();
+    updateStats(d);
+    updateTrades(d.trades||[]);
+  };
+  es.onerror=()=>{es.close();setTimeout(connect,2000)};
+}
+connect();
+
+function pnlClass(v){return v>0?'pos':v<0?'neg':''}
+function fmt(v){return v.toFixed(2)}
+
+function updateStats(d){
+  document.getElementById('s-price').textContent=d.last_price;
+  document.getElementById('s-cash').textContent=fmt(d.cash);
+  document.getElementById('s-pos').textContent=d.position;
+  document.getElementById('s-avg').textContent=d.avg_entry;
+  const rEl=document.getElementById('s-rpnl');rEl.textContent=fmt(d.realized_pnl);rEl.className='value '+pnlClass(d.realized_pnl);
+  const uEl=document.getElementById('s-upnl');uEl.textContent=fmt(d.unrealized_pnl);uEl.className='value '+pnlClass(d.unrealized_pnl);
+  const tEl=document.getElementById('s-tpnl');tEl.textContent=fmt(d.total_pnl);tEl.className='value '+pnlClass(d.total_pnl);
+  document.getElementById('s-eq').textContent=fmt(d.equity);
+}
+
+function updateTrades(trades){
+  const tbody=document.getElementById('trade-body');
+  tbody.innerHTML='';
+  for(let i=trades.length-1;i>=0;i--){
+    const t=trades[i];
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${i+1}</td><td style="color:${t.side==='buy'?'var(--green)':'var(--red)'}">${t.side.toUpperCase()}</td><td>${t.qty}</td><td>${t.price}</td><td class="${pnlClass(t.pnl)}">${t.pnl.toFixed(4)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ---- actions ----
+async function placeOrder(side){
+  const qty=parseInt(document.getElementById('qty').value)||1;
+  const msg=document.getElementById('order-msg');
+  try{
+    const r=await fetch('/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({side,qty})});
+    const d=await r.json();
+    if(r.ok){msg.style.color='var(--green)';msg.textContent=`✓ ${d.side.toUpperCase()} ${d.qty} @ ${d.price}`}
+    else{msg.style.color='var(--red)';msg.textContent='✗ '+d.error}
+  }catch(e){msg.style.color='var(--red)';msg.textContent='✗ '+e.message}
+}
+
+async function resetSim(){
+  await fetch('/reset',{method:'POST'});
+  priceBuf=[];smaBuf=[];emaBuf=[];
+  document.getElementById('order-msg').textContent='Simulation reset';
+}
+</script>
+</body>
+</html>
